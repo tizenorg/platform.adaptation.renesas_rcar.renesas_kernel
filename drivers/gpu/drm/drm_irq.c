@@ -273,7 +273,6 @@ int drm_irq_install(struct drm_device *dev)
 {
 	int ret, irq;
 	unsigned long sh_flags = 0;
-	char *irqname;
 
 	irq = drm_dev_to_irq(dev);
 
@@ -308,13 +307,8 @@ int drm_irq_install(struct drm_device *dev)
 	if (drm_core_check_feature(dev, DRIVER_IRQ_SHARED))
 		sh_flags = IRQF_SHARED;
 
-	if (dev->devname)
-		irqname = dev->devname;
-	else
-		irqname = dev->driver->name;
-
 	ret = request_irq(irq, dev->driver->irq_handler,
-			  sh_flags, irqname, dev);
+			  sh_flags, dev->driver->name, dev);
 
 	if (ret < 0) {
 		mutex_lock(&dev->struct_mutex);
