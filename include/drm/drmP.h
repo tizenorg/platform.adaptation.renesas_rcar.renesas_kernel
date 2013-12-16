@@ -1137,6 +1137,8 @@ struct drm_device {
 	/** \name Context support */
 	/*@{ */
 	bool irq_enabled;		/**< True if irq handler is enabled */
+	int irq;
+
 	__volatile__ long context_flag;	/**< Context swapping flag */
 	int last_context;		/**< Last current context */
 	/*@} */
