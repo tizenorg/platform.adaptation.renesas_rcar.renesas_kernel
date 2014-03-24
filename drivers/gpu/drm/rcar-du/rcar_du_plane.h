@@ -55,6 +55,8 @@ struct rcar_du_plane {
 	unsigned int src_y;
 	unsigned int dst_x;
 	unsigned int dst_y;
+
+	bool interlace_flag;
 };
 
 struct rcar_du_planes {

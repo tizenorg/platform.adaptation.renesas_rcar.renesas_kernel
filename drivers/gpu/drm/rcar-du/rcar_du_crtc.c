@@ -116,12 +116,25 @@ static void rcar_du_crtc_set_display_timing(struct rcar_du_crtc *rcrtc)
 					mode->hsync_start - 1);
 	rcar_du_crtc_write(rcrtc, HCR,  mode->htotal - 1);
 
-	rcar_du_crtc_write(rcrtc, VDSR, mode->vtotal - mode->vsync_end - 2);
-	rcar_du_crtc_write(rcrtc, VDER, mode->vtotal - mode->vsync_end +
-					mode->vdisplay - 2);
-	rcar_du_crtc_write(rcrtc, VSPR, mode->vtotal - mode->vsync_end +
-					mode->vsync_start - 1);
-	rcar_du_crtc_write(rcrtc, VCR,  mode->vtotal - 1);
+	if (mode->flags & DRM_MODE_FLAG_INTERLACE) {
+		rcar_du_crtc_write(rcrtc, VDSR, (mode->vtotal / 2)
+						 - (mode->vsync_end / 2) - 2);
+		rcar_du_crtc_write(rcrtc, VDER, (mode->vtotal / 2)
+						 - (mode->vsync_end / 2)
+						 + (mode->vdisplay / 2) - 2);
+		rcar_du_crtc_write(rcrtc, VSPR, (mode->vtotal / 2)
+						 - (mode->vsync_end / 2)
+						 + (mode->vsync_start / 2) - 1);
+		rcar_du_crtc_write(rcrtc, VCR,  (mode->vtotal / 2) - 1);
+	} else {
+		rcar_du_crtc_write(rcrtc, VDSR, mode->vtotal
+						 - mode->vsync_end - 2);
+		rcar_du_crtc_write(rcrtc, VDER, mode->vtotal - mode->vsync_end
+						 + mode->vdisplay - 2);
+		rcar_du_crtc_write(rcrtc, VSPR, mode->vtotal - mode->vsync_end
+						 + mode->vsync_start - 1);
+		rcar_du_crtc_write(rcrtc, VCR,  mode->vtotal - 1);
+	}
 
 	rcar_du_crtc_write(rcrtc, DESR,  mode->htotal - mode->hsync_start);
 	rcar_du_crtc_write(rcrtc, DEWR,  mode->hdisplay);
@@ -244,6 +257,10 @@ static void rcar_du_crtc_start(struct rcar_du_crtc *rcrtc)
 		if (plane->crtc != crtc || !plane->enabled)
 			continue;
 
+		if (rcrtc->crtc.mode.flags & DRM_MODE_FLAG_INTERLACE)
+			plane->interlace_flag = true;
+		else
+			plane->interlace_flag = false;
 		rcar_du_plane_setup(plane);
 	}
 
@@ -253,6 +270,19 @@ static void rcar_du_crtc_start(struct rcar_du_crtc *rcrtc)
 	 */
 	rcar_du_crtc_clr_set(rcrtc, DSYSR, DSYSR_TVM_MASK, DSYSR_TVM_MASTER);
 
+	if (rcrtc->crtc.mode.flags & DRM_MODE_FLAG_INTERLACE) {
+		if (rcrtc->index == 1)
+			rcar_du_crtc_clr_set(rcrtc, DSYSR,
+				DSYSR_SCM_INT_VIDEO, DSYSR_SCM_INT_VIDEO);
+		else
+			rcrtc->group->interlace_grp = true;
+	} else {
+		if (rcrtc->index == 1)
+			rcar_du_crtc_clr_set(rcrtc, DSYSR,
+				DSYSR_SCM_INT_VIDEO, 0);
+		else
+			rcrtc->group->interlace_grp = false;
+	}
 	rcar_du_group_start_stop(rcrtc->group, true);
 
 	rcrtc->started = true;
@@ -274,6 +304,14 @@ static void rcar_du_crtc_stop(struct rcar_du_crtc *rcrtc)
 	 * the HSYNC and VSYNC signals as inputs.
 	 */
 	rcar_du_crtc_clr_set(rcrtc, DSYSR, DSYSR_TVM_MASK, DSYSR_TVM_SWITCH);
+
+	if (rcrtc->crtc.mode.flags & DRM_MODE_FLAG_INTERLACE) {
+		if (rcrtc->index == 1)
+			rcar_du_crtc_clr_set(rcrtc,
+				DSYSR, DSYSR_SCM_INT_VIDEO, 0);
+		else
+			rcrtc->group->interlace_grp = false;
+	}
 
 	rcar_du_group_start_stop(rcrtc->group, false);
 
@@ -485,7 +523,7 @@ static irqreturn_t rcar_du_crtc_irq(int irq, void *arg)
 	status = rcar_du_crtc_read(rcrtc, DSSR);
 	rcar_du_crtc_write(rcrtc, DSRCR, status & DSRCR_MASK);
 
-	if (status & DSSR_VBK) {
+	if (status & DSSR_FRM) {
 		drm_handle_vblank(rcrtc->crtc.dev, rcrtc->index);
 		rcar_du_crtc_finish_page_flip(rcrtc);
 		ret = IRQ_HANDLED;
