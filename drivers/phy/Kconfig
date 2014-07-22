@@ -28,6 +28,13 @@ config PHY_MVEBU_SATA
 	depends on OF
 	select GENERIC_PHY
 
+config PHY_RCAR_GEN2
+	tristate "Renesas R-Car generation 2 USB PHY driver"
+	depends on ARCH_SHMOBILE
+	depends on GENERIC_PHY
+	help
+	  Support for USB PHY found on Renesas R-Car generation 2 SoCs.
+
 config OMAP_USB2
 	tristate "OMAP USB2 PHY Driver"
 	depends on ARCH_OMAP2PLUS
