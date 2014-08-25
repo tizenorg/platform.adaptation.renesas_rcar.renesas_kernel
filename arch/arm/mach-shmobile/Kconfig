@@ -92,7 +92,6 @@ config ARCH_SH7372
 	select ARCH_RMOBILE
 	select ARCH_WANT_OPTIONAL_GPIOLIB
 	select ARM_CPU_SUSPEND if PM || CPU_IDLE
-	select CPU_V7
 	select SH_CLK_CPG
 	select SH_INTC
 
@@ -101,7 +100,6 @@ config ARCH_SH73A0
 	select ARCH_RMOBILE
 	select ARCH_WANT_OPTIONAL_GPIOLIB
 	select ARM_GIC
-	select CPU_V7
 	select I2C
 	select SH_CLK_CPG
 	select SH_INTC
@@ -112,7 +110,6 @@ config ARCH_R8A73A4
 	select ARCH_RMOBILE
 	select ARCH_WANT_OPTIONAL_GPIOLIB
 	select ARM_GIC
-	select CPU_V7
 	select SH_CLK_CPG
 	select RENESAS_IRQC
 	select ARCH_HAS_CPUFREQ
@@ -123,7 +120,6 @@ config ARCH_R8A7740
 	select ARCH_RMOBILE
 	select ARCH_WANT_OPTIONAL_GPIOLIB
 	select ARM_GIC
-	select CPU_V7
 	select SH_CLK_CPG
 	select RENESAS_INTC_IRQPIN
 
@@ -131,7 +127,6 @@ config ARCH_R8A7778
 	bool "R-Car M1A (R8A77781)"
 	select ARCH_RCAR_GEN1
 	select ARCH_WANT_OPTIONAL_GPIOLIB
-	select CPU_V7
 	select SH_CLK_CPG
 	select ARM_GIC
 
@@ -140,7 +135,6 @@ config ARCH_R8A7779
 	select ARCH_RCAR_GEN1
 	select ARCH_WANT_OPTIONAL_GPIOLIB
 	select ARM_GIC
-	select CPU_V7
 	select SH_CLK_CPG
 
 config ARCH_R8A7790
@@ -148,7 +142,6 @@ config ARCH_R8A7790
 	select ARCH_RCAR_GEN2
 	select ARCH_WANT_OPTIONAL_GPIOLIB
 	select ARM_GIC
-	select CPU_V7
 	select MIGHT_HAVE_PCI
 	select SH_CLK_CPG
 	select ARCH_DMA_ADDR_T_64BIT if ARM_LPAE
@@ -158,7 +151,6 @@ config ARCH_R8A7791
 	select ARCH_RCAR_GEN2
 	select ARCH_WANT_OPTIONAL_GPIOLIB
 	select ARM_GIC
-	select CPU_V7
 	select MIGHT_HAVE_PCI
 	select SH_CLK_CPG
 	select ARCH_DMA_ADDR_T_64BIT if ARM_LPAE
