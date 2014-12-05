@@ -164,16 +164,17 @@ struct gpio_desc *gpio_to_desc(unsigned gpio)
 EXPORT_SYMBOL_GPL(gpio_to_desc);
 
 /**
- * Convert an offset on a certain chip to a corresponding descriptor
+ * Get the GPIO descriptor corresponding to the given hw number for this chip.
  */
-static struct gpio_desc *gpiochip_offset_to_desc(struct gpio_chip *chip,
-						 unsigned int offset)
+struct gpio_desc *gpiochip_get_desc(struct gpio_chip *chip,
+				    u16 hwnum)
 {
-	if (offset >= chip->ngpio)
+	if (hwnum >= chip->ngpio)
 		return ERR_PTR(-EINVAL);
 
-	return &chip->desc[offset];
+	return &chip->desc[hwnum];
 }
+EXPORT_SYMBOL_GPL(gpiochip_get_desc);
 
 /**
  * Convert a GPIO descriptor to the integer namespace.
@@ -350,9 +351,9 @@ static ssize_t gpio_direction_store(struct device *dev,
 	if (!test_bit(FLAG_EXPORT, &desc->flags))
 		status = -EIO;
 	else if (sysfs_streq(buf, "high"))
-		status = gpiod_direction_output(desc, 1);
+		status = gpiod_direction_output_raw(desc, 1);
 	else if (sysfs_streq(buf, "out") || sysfs_streq(buf, "low"))
-		status = gpiod_direction_output(desc, 0);
+		status = gpiod_direction_output_raw(desc, 0);
 	else if (sysfs_streq(buf, "in"))
 		status = gpiod_direction_input(desc);
 	else
@@ -1590,7 +1591,7 @@ int gpio_request_one(unsigned gpio, unsigned long flags, const char *label)
 	if (flags & GPIOF_DIR_IN)
 		err = gpiod_direction_input(desc);
 	else
-		err = gpiod_direction_output(desc,
+		err = gpiod_direction_output_raw(desc,
 				(flags & GPIOF_INIT_HIGH) ? 1 : 0);
 
 	if (err)
@@ -1756,27 +1757,12 @@ fail:
 }
 EXPORT_SYMBOL_GPL(gpiod_direction_input);
 
-/**
- * gpiod_direction_output - set the GPIO direction to input
- * @desc:	GPIO to set to output
- * @value:	initial output value of the GPIO
- *
- * Set the direction of the passed GPIO to output, such as gpiod_set_value() can
- * be called safely on it. The initial value of the output must be specified.
- *
- * Return 0 in case of success, else an error code.
- */
-int gpiod_direction_output(struct gpio_desc *desc, int value)
+static int _gpiod_direction_output_raw(struct gpio_desc *desc, int value)
 {
 	unsigned long		flags;
 	struct gpio_chip	*chip;
 	int			status = -EINVAL;
 	int offset;
-
-	if (!desc || !desc->chip) {
-		pr_warn("%s: invalid GPIO\n", __func__);
-		return -EINVAL;
-	}
 
 	/* GPIOs used for IRQs shall not be set as output */
 	if (test_bit(FLAG_USED_AS_IRQ, &desc->flags)) {
@@ -1839,6 +1825,50 @@ fail:
 	if (status)
 		gpiod_dbg(desc, "%s: gpio status %d\n", __func__, status);
 	return status;
+}
+
+/**
+ * gpiod_direction_output_raw - set the GPIO direction to output
+ * @desc:	GPIO to set to output
+ * @value:	initial output value of the GPIO
+ *
+ * Set the direction of the passed GPIO to output, such as gpiod_set_value() can
+ * be called safely on it. The initial value of the output must be specified
+ * as raw value on the physical line without regard for the ACTIVE_LOW status.
+ *
+ * Return 0 in case of success, else an error code.
+ */
+int gpiod_direction_output_raw(struct gpio_desc *desc, int value)
+{
+	if (!desc || !desc->chip) {
+		pr_warn("%s: invalid GPIO\n", __func__);
+		return -EINVAL;
+	}
+	return _gpiod_direction_output_raw(desc, value);
+}
+EXPORT_SYMBOL_GPL(gpiod_direction_output_raw);
+
+/**
+ * gpiod_direction_output - set the GPIO direction to input
+ * @desc:	GPIO to set to output
+ * @value:	initial output value of the GPIO
+ *
+ * Set the direction of the passed GPIO to output, such as gpiod_set_value() can
+ * be called safely on it. The initial value of the output must be specified
+ * as the logical value of the GPIO, i.e. taking its ACTIVE_LOW status into
+ * account.
+ *
+ * Return 0 in case of success, else an error code.
+ */
+int gpiod_direction_output(struct gpio_desc *desc, int value)
+{
+	if (!desc || !desc->chip) {
+		pr_warn("%s: invalid GPIO\n", __func__);
+		return -EINVAL;
+	}
+	if (test_bit(FLAG_ACTIVE_LOW, &desc->flags))
+		value = !value;
+	return _gpiod_direction_output_raw(desc, value);
 }
 EXPORT_SYMBOL_GPL(gpiod_direction_output);
 
@@ -2161,7 +2191,7 @@ EXPORT_SYMBOL_GPL(gpiod_lock_as_irq);
 
 int gpio_lock_as_irq(struct gpio_chip *chip, unsigned int offset)
 {
-	return gpiod_lock_as_irq(gpiochip_offset_to_desc(chip, offset));
+	return gpiod_lock_as_irq(gpiochip_get_desc(chip, offset));
 }
 EXPORT_SYMBOL_GPL(gpio_lock_as_irq);
 
@@ -2183,7 +2213,7 @@ EXPORT_SYMBOL_GPL(gpiod_unlock_as_irq);
 
 void gpio_unlock_as_irq(struct gpio_chip *chip, unsigned int offset)
 {
-	return gpiod_unlock_as_irq(gpiochip_offset_to_desc(chip, offset));
+	return gpiod_unlock_as_irq(gpiochip_get_desc(chip, offset));
 }
 EXPORT_SYMBOL_GPL(gpio_unlock_as_irq);
 
@@ -2404,7 +2434,7 @@ static struct gpio_desc *gpiod_find(struct device *dev, const char *con_id,
 			return ERR_PTR(-EINVAL);
 		}
 
-		desc = gpiochip_offset_to_desc(chip, p->chip_hwnum);
+		desc = gpiochip_get_desc(chip, p->chip_hwnum);
 		*flags = p->flags;
 
 		return desc;
@@ -2417,22 +2447,43 @@ static struct gpio_desc *gpiod_find(struct device *dev, const char *con_id,
  * gpio_get - obtain a GPIO for a given GPIO function
  * @dev:	GPIO consumer, can be NULL for system-global GPIOs
  * @con_id:	function within the GPIO consumer
+ * @flags:	optional GPIO initialization flags
  *
  * Return the GPIO descriptor corresponding to the function con_id of device
  * dev, -ENOENT if no GPIO has been assigned to the requested function, or
  * another IS_ERR() code if an error occured while trying to acquire the GPIO.
  */
-struct gpio_desc *__must_check gpiod_get(struct device *dev, const char *con_id)
+struct gpio_desc *__must_check __gpiod_get(struct device *dev, const char *con_id,
+					 enum gpiod_flags flags)
 {
-	return gpiod_get_index(dev, con_id, 0);
+	return gpiod_get_index(dev, con_id, 0, flags);
 }
-EXPORT_SYMBOL_GPL(gpiod_get);
+EXPORT_SYMBOL_GPL(__gpiod_get);
+
+/**
+ * gpiod_get_optional - obtain an optional GPIO for a given GPIO function
+ * @dev: GPIO consumer, can be NULL for system-global GPIOs
+ * @con_id: function within the GPIO consumer
+ * @flags: optional GPIO initialization flags
+ *
+ * This is equivalent to gpiod_get(), except that when no GPIO was assigned to
+ * the requested function it will return NULL. This is convenient for drivers
+ * that need to handle optional GPIOs.
+ */
+struct gpio_desc *__must_check __gpiod_get_optional(struct device *dev,
+						  const char *con_id,
+						  enum gpiod_flags flags)
+{
+	return gpiod_get_index_optional(dev, con_id, 0, flags);
+}
+EXPORT_SYMBOL_GPL(__gpiod_get_optional);
 
 /**
  * gpiod_get_index - obtain a GPIO from a multi-index GPIO function
  * @dev:	GPIO consumer, can be NULL for system-global GPIOs
  * @con_id:	function within the GPIO consumer
  * @idx:	index of the GPIO to obtain in the consumer
+ * @flags:	optional GPIO initialization flags
  *
  * This variant of gpiod_get() allows to access GPIOs other than the first
  * defined one for functions that define several GPIOs.
@@ -2441,23 +2492,24 @@ EXPORT_SYMBOL_GPL(gpiod_get);
  * requested function and/or index, or another IS_ERR() code if an error
  * occured while trying to acquire the GPIO.
  */
-struct gpio_desc *__must_check gpiod_get_index(struct device *dev,
+struct gpio_desc *__must_check __gpiod_get_index(struct device *dev,
 					       const char *con_id,
-					       unsigned int idx)
+					       unsigned int idx,
+					       enum gpiod_flags flags)
 {
 	struct gpio_desc *desc = NULL;
 	int status;
-	enum gpio_lookup_flags flags = 0;
+	enum gpio_lookup_flags lookupflags = 0;
 
 	dev_dbg(dev, "GPIO lookup for consumer %s\n", con_id);
 
 	/* Using device tree? */
 	if (IS_ENABLED(CONFIG_OF) && dev && dev->of_node) {
 		dev_dbg(dev, "using device tree for GPIO lookup\n");
-		desc = of_find_gpio(dev, con_id, idx, &flags);
+		desc = of_find_gpio(dev, con_id, idx, &lookupflags);
 	} else if (IS_ENABLED(CONFIG_ACPI) && dev && ACPI_HANDLE(dev)) {
 		dev_dbg(dev, "using ACPI for GPIO lookup\n");
-		desc = acpi_find_gpio(dev, con_id, idx, &flags);
+		desc = acpi_find_gpio(dev, con_id, idx, &lookupflags);
 	}
 
 	/*
@@ -2466,7 +2518,7 @@ struct gpio_desc *__must_check gpiod_get_index(struct device *dev,
 	 */
 	if (!desc || desc == ERR_PTR(-ENOENT)) {
 		dev_dbg(dev, "using lookup tables for GPIO lookup");
-		desc = gpiod_find(dev, con_id, idx, &flags);
+		desc = gpiod_find(dev, con_id, idx, &lookupflags);
 	}
 
 	if (IS_ERR(desc)) {
@@ -2479,16 +2531,62 @@ struct gpio_desc *__must_check gpiod_get_index(struct device *dev,
 	if (status < 0)
 		return ERR_PTR(status);
 
-	if (flags & GPIO_ACTIVE_LOW)
+	if (lookupflags & GPIO_ACTIVE_LOW)
 		set_bit(FLAG_ACTIVE_LOW, &desc->flags);
-	if (flags & GPIO_OPEN_DRAIN)
+	if (lookupflags & GPIO_OPEN_DRAIN)
 		set_bit(FLAG_OPEN_DRAIN, &desc->flags);
-	if (flags & GPIO_OPEN_SOURCE)
+	if (lookupflags & GPIO_OPEN_SOURCE)
 		set_bit(FLAG_OPEN_SOURCE, &desc->flags);
+
+	/* No particular flag request, return here... */
+	if (flags & GPIOD_FLAGS_BIT_DIR_SET)
+		return desc;
+
+	/* Process flags */
+	if (flags & GPIOD_FLAGS_BIT_DIR_OUT)
+		status = gpiod_direction_output(desc,
+					      flags & GPIOD_FLAGS_BIT_DIR_VAL);
+	else
+		status = gpiod_direction_input(desc);
+
+	if (status < 0) {
+		dev_dbg(dev, "setup of GPIO %s failed\n", con_id);
+		gpiod_put(desc);
+		return ERR_PTR(status);
+	}
 
 	return desc;
 }
-EXPORT_SYMBOL_GPL(gpiod_get_index);
+EXPORT_SYMBOL_GPL(__gpiod_get_index);
+
+/**
+ * gpiod_get_index_optional - obtain an optional GPIO from a multi-index GPIO
+ *                            function
+ * @dev: GPIO consumer, can be NULL for system-global GPIOs
+ * @con_id: function within the GPIO consumer
+ * @index: index of the GPIO to obtain in the consumer
+ * @flags: optional GPIO initialization flags
+ *
+ * This is equivalent to gpiod_get_index(), except that when no GPIO with the
+ * specified index was assigned to the requested function it will return NULL.
+ * This is convenient for drivers that need to handle optional GPIOs.
+ */
+struct gpio_desc *__must_check __gpiod_get_index_optional(struct device *dev,
+							const char *con_id,
+							unsigned int index,
+							enum gpiod_flags flags)
+{
+	struct gpio_desc *desc;
+
+	desc = gpiod_get_index(dev, con_id, index, flags);
+	if (IS_ERR(desc)) {
+		if (PTR_ERR(desc) == -ENOENT)
+			return NULL;
+	}
+
+	return desc;
+}
+EXPORT_SYMBOL_GPL(__gpiod_get_index_optional);
 
 /**
  * gpiod_put - dispose of a GPIO descriptor
