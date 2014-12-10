@@ -41,6 +41,20 @@ static int rcar_du_hdmi_connector_mode_valid(struct drm_connector *connector,
 	struct rcar_du_connector *con = to_rcar_connector(connector);
 	struct drm_encoder *encoder = rcar_encoder_to_drm_encoder(con->encoder);
 	struct drm_encoder_slave_funcs *sfuncs = to_slave_funcs(encoder);
+	struct rcar_du_device *rcdu = connector->dev->dev_private;
+	unsigned int max_width, max_height;
+	bool laced;
+
+	max_width = rcdu->info->max_xres;
+	max_height = rcdu->info->max_yres;
+	laced = rcdu->info->interlace;
+
+	if ((mode->hdisplay * mode->vdisplay) > (max_width * max_height))
+		return MODE_BAD_WIDTH;
+
+	if (((mode->hdisplay * mode->vdisplay) == (max_width * max_height))
+		&& (laced) && (!(mode->flags & DRM_MODE_FLAG_INTERLACE)))
+		return MODE_BAD;
 
 	if (sfuncs->mode_valid == NULL)
 		return MODE_OK;
