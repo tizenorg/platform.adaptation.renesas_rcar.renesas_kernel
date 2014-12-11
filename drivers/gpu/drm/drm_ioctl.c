@@ -72,9 +72,6 @@ static void
 drm_unset_busid(struct drm_device *dev,
 		struct drm_master *master)
 {
-	kfree(dev->devname);
-	dev->devname = NULL;
-
 	kfree(master->unique);
 	master->unique = NULL;
 	master->unique_len = 0;
@@ -130,13 +127,25 @@ static int drm_set_busid(struct drm_device *dev, struct drm_file *file_priv)
 	if (master->unique != NULL)
 		drm_unset_busid(dev, master);
 
-	ret = dev->driver->bus->set_busid(dev, master);
-	if (ret)
-		goto err;
+	if (dev->driver->bus && dev->driver->bus->set_busid) {
+		ret = dev->driver->bus->set_busid(dev, master);
+		if (ret) {
+			drm_unset_busid(dev, master);
+			return ret;
+		}
+	} else {
+		if (WARN(dev->unique == NULL,
+			 "No drm_bus.set_busid() implementation provided by "
+			 "%ps. Use drm_dev_set_unique() to set the unique "
+			 "name explicitly.", dev->driver))
+			return -EINVAL;
+
+		master->unique = kstrdup(dev->unique, GFP_KERNEL);
+		if (master->unique)
+			master->unique_len = strlen(dev->unique);
+	}
+
 	return 0;
-err:
-	drm_unset_busid(dev, master);
-	return ret;
 }
 
 /**

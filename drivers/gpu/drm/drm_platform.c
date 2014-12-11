@@ -64,7 +64,7 @@ static int drm_get_platform_dev(struct platform_device *platdev,
 	return 0;
 
 err_free:
-	drm_dev_free(dev);
+	drm_dev_unref(dev);
 	return ret;
 }
 
@@ -106,17 +106,6 @@ static int drm_platform_set_busid(struct drm_device *dev, struct drm_master *mas
 		goto err;
 	}
 
-	dev->devname =
-		kmalloc(strlen(dev->platformdev->name) +
-			master->unique_len + 2, GFP_KERNEL);
-
-	if (dev->devname == NULL) {
-		ret = -ENOMEM;
-		goto err;
-	}
-
-	sprintf(dev->devname, "%s@%s", dev->platformdev->name,
-		master->unique);
 	return 0;
 err:
 	return ret;
