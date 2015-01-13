@@ -93,7 +93,7 @@ BuildRequires: python-devel
 BuildRequires: u-boot-tools
 %endif
 
-ExclusiveArch: %{arch_32bits} x86_64 armv7l
+ExclusiveArch: armv7l
 
 Source0: %{name}-%{version}.tar.bz2
 
