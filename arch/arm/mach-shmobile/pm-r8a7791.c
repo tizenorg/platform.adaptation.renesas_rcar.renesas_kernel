@@ -70,4 +70,10 @@ void __init r8a7791_pm_init(void)
 
 	r8a7791_sysc_init();
 	shmobile_smp_apmu_suspend_init();
+
+        /* WORKARROUND: power on 3DG */
+	{
+	    void __iomem *base = rcar_sysc_init(0xe6180000);
+	    iowrite32(0x01, base + 0xcc); /* 0xCC: PWRONCR2 */
+	}
 }
