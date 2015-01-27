@@ -1085,7 +1085,7 @@
 				R8A7791_CLK_VSP1_S
 			>;
 			clock-output-names =
-				"vcp0", "vpc0", "jpu", "ssp1", "tmu1", "3dg",
+				"vcp0", "vpc0", "jpu", "ssp1", "tmu1", "sgx",
 				"2ddmac", "fdp1-1", "fdp1-0", "tmu3", "tmu2", "cmt0",
 				"tmu0", "vsp1-du1", "vsp1-du0", "vsp1-sy";
 		};
