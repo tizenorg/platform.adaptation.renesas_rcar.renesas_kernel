@@ -816,6 +816,9 @@
 		};
 	};
 
+	pvrsrvkm@fd800000 {
+	};
+
 	clocks {
 		#address-cells = <2>;
 		#size-cells = <2>;
