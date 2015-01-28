@@ -3,7 +3,7 @@
 # from MeeGo/Moblin/Fedora
 #
 
-%define upstream_version snapshot3+hdmi
+%define upstream_version 3.14.26
 %define platform rcar-m2
 %define profile ivi
 
@@ -25,6 +25,8 @@
 %define trace_supported 1
 %define uboot_supported 0
 %define vdso_supported 1
+%define initrd_supported 1
+%define boot_image vmlinuz
 
 
 # Overide per configuration
@@ -53,8 +55,11 @@
 %define defconfig tizen_%{platform}_defconfig
 %define uboot_supported 1
 %define dtbs_supported 1
+%define initrd_supported 0
 %define loadaddr 40008000
 %define kernel_image uImage
+%define boot_image uImage
+%define modules_supported 1
 %endif
 
 
@@ -213,9 +218,13 @@ install -d %{buildroot}/boot
 
 install -m 644 .config %{buildroot}/boot/config-%{kernel_full_version}
 install -m 644 System.map %{buildroot}/boot/System.map-%{kernel_full_version}
-install -m 755 %{kernel_arch_subdir}/boot/%{kernel_image} %{buildroot}/boot/vmlinuz-%{kernel_full_version}
+
+install -m 755 %{kernel_arch_subdir}/boot/%{kernel_image} %{buildroot}/boot/%{boot_image}-%{kernel_full_version}
+
 # Dummy initrd, will not be included in the actual package but needed for files
+%if %initrd_supported
 touch %{buildroot}/boot/initrd-%{kernel_full_version}.img
+%endif
 
 %if %modules_supported
 make -s ARCH=%{kernel_arch} INSTALL_MOD_PATH=%{buildroot} modules_install KERNELRELEASE=%{kernel_full_version}
@@ -305,33 +314,23 @@ rm -rf %{buildroot}/usr/lib/debug/lib/traceevent/plugins/*.debug
 ###
 
 %post -n kernel-%{variant}
-if [ -f "/boot/loader/loader.conf" ]; then
-	# EFI boot with gummiboot
-	INSTALLERFW_MOUNT_PREFIX="/" /usr/sbin/setup-scripts-gummiboot-conf
-    # "/etc/installerfw-environment" does not exist in MIC environment, when it
-    # builds the image. MIC will add boot-loader entries later using the
-    # 'setup-scripts-boot' script.
-    if [ -f "/etc/installerfw-environment" ] && \
-        [ -x "/usr/sbin/setup-scripts-bootloader-conf" ]; then
-            /usr/sbin/setup-scripts-bootloader-conf add -f vmlinuz-%{kernel_full_version}
-            /usr/sbin/setup-scripts-bootloader-conf default -f vmlinuz-%{kernel_full_version}
-    fi
-else
-	# Legacy boot
-	last_installed_ver="$(rpm -q --qf '%{INSTALLTIME}: %{VERSION}-%{RELEASE}\n' kernel-%{variant} | sort -r | sed -e 's/[^:]*: \(.*\)/\1/g' | sed -n -e "1p")"
-	ln -sf vmlinuz-$last_installed_ver-%{variant} /boot/vmlinuz
+# Legacy boot
+last_installed_ver="$(rpm -q --qf '%{INSTALLTIME}: %{VERSION}-%{RELEASE}\n' kernel-%{variant} | sort -r | sed -e 's/[^:]*: \(.*\)/\1/g' | sed -n -e "1p")"
+ln -sf %{boot_image}-$last_installed_ver-%{variant} /boot/%{boot_image}
+ln -sf $last_installed_ver-%{variant} /lib/modules/latest
 
-	if [ -z "$last_installed_ver" ]; then
-		# Something went wrong, print some diagnostics
-		printf "%s\n" "Error: cannot find kernel version" 1>&2
-		printf "%s\n" "The command was: rpm -q --qf '%{INSTALLTIME}: %{VERSION}-%{RELEASE}\n' kernel-%{variant} | sort -r | sed -e 's/[^:]*: \(.*\)/\1/g' | sed -n -e \"1p\"" 1>&2
-		printf "%s\n" "Output of the \"rpm -q --qf '%{INSTALLTIME}: %{VERSION}-%{RELEASE}\n' kernel-%{variant}\" is:" 1>&2
-		result="$(rpm -q --qf '%{INSTALLTIME}: %{VERSION}-%{RELEASE}\n' kernel-%{variant})"
-		printf "%s\n" "$result" 1>&2
-	fi
+if [ -z "$last_installed_ver" ]; then
+	# Something went wrong, print some diagnostics
+	printf "%s\n" "Error: cannot find kernel version" 1>&2
+	printf "%s\n" "The command was: rpm -q --qf '%{INSTALLTIME}: %{VERSION}-%{RELEASE}\n' kernel-%{variant} | sort -r | sed -e 's/[^:]*: \(.*\)/\1/g' | sed -n -e \"1p\"" 1>&2
+	printf "%s\n" "Output of the \"rpm -q --qf '%{INSTALLTIME}: %{VERSION}-%{RELEASE}\n' kernel-%{variant}\" is:" 1>&2
+	result="$(rpm -q --qf '%{INSTALLTIME}: %{VERSION}-%{RELEASE}\n' kernel-%{variant})"
+	printf "%s\n" "$result" 1>&2
 fi
 
+%if %initrd_supported
 %{_bindir}/dracut /boot/initrd-%{kernel_full_version}.img %{kernel_full_version}
+%endif
 
 %post -n kernel-%{variant}-devel
 if [ -x /usr/sbin/hardlink ]; then
@@ -347,15 +346,15 @@ if [ -f "/boot/loader/loader.conf" ]; then
 	INSTALLERFW_MOUNT_PREFIX="/" /usr/sbin/setup-scripts-gummiboot-conf
     if [ -f "/etc/installerfw-environment" ] && \
         [ -x "/usr/sbin/setup-scripts-bootloader-conf" ]; then
-            /usr/sbin/setup-scripts-bootloader-conf remove -f vmlinuz-%{kernel_full_version}
+            /usr/sbin/setup-scripts-bootloader-conf remove -f %{boot_image}-%{kernel_full_version}
     fi
 
 else
 	last_installed_ver="$(rpm -q --qf '%{INSTALLTIME}: %{VERSION}-%{RELEASE}\n' kernel-%{variant} | sort -r | sed -e 's/[^:]*: \(.*\)/\1/g' | sed -n -e "1p")"
 	if [ -n "$last_installed_ver" ]; then
-		ln -sf vmlinuz-$last_installed_ver-%{variant} /boot/vmlinuz
+		ln -sf %{boot_image}-$last_installed_ver-%{variant} /boot/%{boot_image}
 	else
-		rm -rf /boot/vmlinuz
+		rm -rf /boot/%{boot_image}
 	fi
 fi
 
@@ -366,7 +365,7 @@ fi
 ###
 %files -n kernel-%{variant}
 %license COPYING
-/boot/vmlinuz-%{kernel_full_version}
+/boot/%{boot_image}-%{kernel_full_version}
 /boot/System.map-%{kernel_full_version}
 /boot/config-%{kernel_full_version}
 %if %modules_supported
@@ -383,7 +382,9 @@ fi
 %if %dtbs_supported
 /boot/*.dtb
 %endif
+%if %initrd_supported
 %ghost /boot/initrd-%{kernel_full_version}.img
+%endif
 
 
 %files -n kernel-%{variant}-devel
